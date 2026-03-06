@@ -79,6 +79,10 @@ var (
 	// absolutePathPattern matches absolute file paths in commands (Unix and Windows).
 	absolutePathPattern = regexp.MustCompile(`[A-Za-z]:\\[^\\\"']+|/[^\s\"']+`)
 
+	// httpURLPattern matches HTTP(S) URLs so they can be excluded from path-based
+	// workspace checks. URLs are command arguments, not local filesystem paths.
+	httpURLPattern = regexp.MustCompile(`(?i)\bhttps?://[^\s"'<>]+`)
+
 	// safePaths are kernel pseudo-devices that are always safe to reference in
 	// commands, regardless of workspace restriction. They contain no user data
 	// and cannot cause destructive writes.
@@ -327,7 +331,9 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 	}
 
 	if t.restrictToWorkspace {
-		if strings.Contains(cmd, "..\\") || strings.Contains(cmd, "../") {
+		sanitizedCmd := stripHTTPURLs(cmd)
+
+		if strings.Contains(sanitizedCmd, "..\\") || strings.Contains(sanitizedCmd, "../") {
 			return "Command blocked by safety guard (path traversal detected)"
 		}
 
@@ -336,7 +342,7 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 			return ""
 		}
 
-		matches := absolutePathPattern.FindAllString(cmd, -1)
+		matches := absolutePathPattern.FindAllString(sanitizedCmd, -1)
 
 		for _, raw := range matches {
 			p, err := filepath.Abs(raw)
@@ -360,6 +366,12 @@ func (t *ExecTool) guardCommand(command, cwd string) string {
 	}
 
 	return ""
+}
+
+func stripHTTPURLs(command string) string {
+	return httpURLPattern.ReplaceAllStringFunc(command, func(match string) string {
+		return strings.Repeat(" ", len(match))
+	})
 }
 
 func (t *ExecTool) SetTimeout(timeout time.Duration) {

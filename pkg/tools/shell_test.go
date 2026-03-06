@@ -312,6 +312,29 @@ func TestShellTool_RestrictToWorkspace(t *testing.T) {
 	}
 }
 
+// TestShellTool_RestrictToWorkspace_AllowsHTTPURLs verifies that HTTP(S) URLs
+// are not mistaken for absolute filesystem paths when workspace restriction is active.
+func TestShellTool_RestrictToWorkspace_AllowsHTTPURLs(t *testing.T) {
+	tmpDir := t.TempDir()
+	tool, err := NewExecTool(tmpDir, true)
+	if err != nil {
+		t.Fatalf("unable to configure exec tool: %s", err)
+	}
+
+	commands := []string{
+		`echo "http://example.com"`,
+		`echo "https://test"`,
+		`echo "https://example.com/path/../still-a-url"`,
+	}
+
+	for _, cmd := range commands {
+		result := tool.Execute(context.Background(), map[string]any{"command": cmd})
+		if result.IsError {
+			t.Fatalf("expected HTTP(S) URL to be allowed, command=%q error=%s", cmd, result.ForLLM)
+		}
+	}
+}
+
 // TestShellTool_DevNullAllowed verifies that /dev/null redirections are not blocked (issue #964).
 func TestShellTool_DevNullAllowed(t *testing.T) {
 	tmpDir := t.TempDir()
